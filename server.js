@@ -21,7 +21,7 @@ const config = {
 };
 
 // In-memory fallback store (used when no database configured)
-let memoryItems = [
+const memoryItems = [
   { id: 1, name: "Item 1", description: "Sample item 1" },
   { id: 2, name: "Item 2", description: "Sample item 2" },
   { id: 3, name: "Item 3", description: "Sample item 3" },
@@ -156,7 +156,7 @@ app.use((req, res) => {
 });
 
 // Error handler
-app.use((err, req, res, next) => {
+app.use((err, _req, res, _next) => {
   console.error("Error:", err.message);
   res.status(500).json({ error: "Internal server error", message: err.message });
 });
@@ -305,11 +305,20 @@ process.on("SIGINT", () => shutdown("SIGINT"));
 // ============================================
 // Start
 // ============================================
-initDatabase().then(() => {
-  app.listen(PORT, () => {
+async function start() {
+  await initDatabase();
+  return app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     console.log(`Environment: ${config.nodeEnv}`);
     console.log(`Database: ${config.db.enabled ? "PostgreSQL" : "in-memory"}`);
     console.log(`Health check: http://localhost:${PORT}/health`);
   });
-});
+}
+
+// Only start listening when run directly (not when imported by tests)
+if (require.main === module) {
+  start();
+}
+
+// Export for testing
+module.exports = { app, start, config, memoryStore: { get items() { return memoryItems; } } };
