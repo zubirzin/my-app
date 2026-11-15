@@ -1,0 +1,46 @@
+# ============================================
+# .gitignore — Git exclusion rules
+# ============================================
+
+# Dependencies
+node_modules/
+vendor/
+__pycache__/
+*.pyc
+.Python
+
+# Build output
+dist/
+build/
+*.egg-info/
+
+# Environment
+.env
+.env.local
+.env.*.local
+*.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Testing
+coverage/
+.nyc_output/
+
+# Docker
+.docker/
+
+# GitLab
+.gitlab/

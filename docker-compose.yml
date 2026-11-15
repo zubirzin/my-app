@@ -1,0 +1,102 @@
+# ============================================
+# docker-compose.yml — Local Development & Testing
+# ============================================
+# Usage:
+#   docker compose up -d        # Start all services
+#   docker compose down         # Stop all services
+#   docker compose logs -f      # View logs
+#   docker compose ps           # List containers
+# Docs: https://docs.docker.com/compose/
+
+version: "3.8"
+
+services:
+  # --------------------------------------------
+  # Web Application
+  # --------------------------------------------
+  app:
+    build: .
+    container_name: myapp
+    ports:
+      - "3000:80"
+    environment:
+      - NODE_ENV=development
+      - PORT=80
+    volumes:
+      - ./app:/usr/share/nginx/html:ro  # Live reload for development
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - app-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.myapp.rule=Host(`localhost`)"
+
+  # --------------------------------------------
+  # Database (PostgreSQL) — Uncomment if needed
+  # --------------------------------------------
+  # db:
+  #   image: postgres:16-alpine
+  #   container_name: myapp-db
+  #   environment:
+  #     - POSTGRES_USER=myapp
+  #     - POSTGRES_PASSWORD=myapp_password
+  #     - POSTGRES_DB=myapp_db
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   ports:
+  #     - "5432:5432"
+  #   restart: unless-stopped
+  #   networks:
+  #     - app-network
+
+  # --------------------------------------------
+  # Redis (Cache) — Uncomment if needed
+  # --------------------------------------------
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: myapp-redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   restart: unless-stopped
+  #   networks:
+  #     - app-network
+
+  # --------------------------------------------
+  # Nginx Reverse Proxy — Uncomment if needed
+  # --------------------------------------------
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: myapp-nginx
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./ssl:/etc/nginx/ssl:ro
+  #   depends_on:
+  #     - app
+  #   restart: unless-stopped
+  #   networks:
+  #     - app-network
+
+# --------------------------------------------
+# Networks
+# --------------------------------------------
+networks:
+  app-network:
+    driver: bridge
+
+# --------------------------------------------
+# Volumes
+# --------------------------------------------
+volumes:
+  postgres_data:
+  redis_data:

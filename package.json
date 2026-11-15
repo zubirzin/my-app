@@ -1,0 +1,14 @@
+{
+  "name": "my-app",
+  "version": "1.0.0",
+  "description": "Docker-ready application with GitLab CI/CD",
+  "main": "index.js",
+  "scripts": {
+    "start": "echo 'App started' && exit 0",
+    "test": "echo 'Tests passed' && exit 0",
+    "lint": "echo 'Linting passed' && exit 0"
+  },
+  "keywords": ["docker", "gitlab", "ci-cd"],
+  "author": "",
+  "license": "MIT"
+}

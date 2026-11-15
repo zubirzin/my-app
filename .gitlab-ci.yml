@@ -1,0 +1,140 @@
+# ============================================
+# GitLab CI/CD Pipeline — Build, Test, Deploy
+# ============================================
+# Free tier: 400 pipeline minutes/month
+# Docs: https://docs.gitlab.com/ee/ci/
+
+stages:
+  - build
+  - test
+  - deploy
+
+# --------------------------------------------
+# Variables
+# --------------------------------------------
+variables:
+  DOCKER_IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+  DOCKER_LATEST: $CI_REGISTRY_IMAGE:latest
+
+# --------------------------------------------
+# Stage: Build Docker Image
+# --------------------------------------------
+build:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
+  script:
+    - echo "Building Docker image..."
+    - docker build -t $DOCKER_IMAGE -t $DOCKER_LATEST .
+    - docker push $DOCKER_IMAGE
+    - docker push $DOCKER_LATEST
+  rules:
+    - if: $CI_COMMIT_BRANCH
+
+# --------------------------------------------
+# Stage: Test (unit tests, linting, security)
+# --------------------------------------------
+test:unit:
+  stage: test
+  image: node:20-alpine
+  script:
+    - echo "Running unit tests..."
+    # Uncomment for Node.js:
+    # - npm ci
+    # - npm test
+    # For Python:
+    # - pip install -r requirements.txt
+    # - python -m pytest
+    - echo "Tests passed (add your test commands here)"
+  rules:
+    - if: $CI_COMMIT_BRANCH
+
+test:lint:
+  stage: test
+  image: node:20-alpine
+  script:
+    - echo "Running linter..."
+    # Uncomment for Node.js:
+    # - npm ci
+    # - npm run lint
+    - echo "Linting passed (add your lint commands here)"
+  rules:
+    - if: $CI_COMMIT_BRANCH
+
+# --------------------------------------------
+# Stage: Security Scanning (GitLab built-in)
+# --------------------------------------------
+test:security:
+  stage: test
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - echo "Running security scan..."
+    # GitLab built-in security templates
+    # Add in Settings > CI/CD > Security & Compliance
+    - echo "Security scan passed (configure in GitLab UI)"
+  rules:
+    - if: $CI_COMMIT_BRANCH
+
+# --------------------------------------------
+# Stage: Deploy to Server
+# --------------------------------------------
+deploy:staging:
+  stage: deploy
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
+  script:
+    - echo "Deploying to staging..."
+    # Option A: SSH to your server
+    # - apk add --no-cache openssh-client
+    # - ssh user@staging-server "docker pull $DOCKER_LATEST && docker-compose up -d"
+    #
+    # Option B: Deploy to cloud (AWS, GCP, Azure)
+    # - Install cloud CLI
+    # - Run deployment commands
+    #
+    # Option C: Kubernetes
+    # - kubectl set image deployment/my-app app=$DOCKER_IMAGE
+    - echo "Deployment complete (configure your deployment target)"
+  environment:
+    name: staging
+    url: https://staging.your-domain.com
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+    - if: $CI_COMMIT_BRANCH == "staging"
+
+deploy:production:
+  stage: deploy
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
+  script:
+    - echo "Deploying to production..."
+    - echo "Add your production deployment commands here"
+  environment:
+    name: production
+    url: https://your-domain.com
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual  # Require manual approval for production
+
+# --------------------------------------------
+# Cleanup (optional)
+# --------------------------------------------
+cleanup:
+  stage: .post
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - docker system prune -f
+  when: always

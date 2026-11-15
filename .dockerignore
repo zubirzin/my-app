@@ -1,0 +1,64 @@
+# ============================================
+# .dockerignore — Exclude files from Docker build
+# ============================================
+# Speeds up build, reduces image size
+# Docs: https://docs.docker.com/engine/reference/builder/#dockerignore-file
+
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# CI/CD
+.gitlab-ci.yml
+.github/
+
+# Documentation
+README.md
+*.md
+
+# Development files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Dependencies (installed in Dockerfile)
+node_modules/
+vendor/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Testing
+coverage/
+.nyc_output/
+tests/
+*.test.js
+*.spec.js
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build output
+dist/
+build/
+*.egg-info/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
