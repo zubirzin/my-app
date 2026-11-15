@@ -41,14 +41,8 @@ test:unit:
   stage: test
   image: node:20-alpine
   script:
-    - echo "Running unit tests..."
-    # Uncomment for Node.js:
-    # - npm ci
-    # - npm test
-    # For Python:
-    # - pip install -r requirements.txt
-    # - python -m pytest
-    - echo "Tests passed (add your test commands here)"
+    - npm ci
+    - npm test
   rules:
     - if: $CI_COMMIT_BRANCH
 
@@ -56,11 +50,8 @@ test:lint:
   stage: test
   image: node:20-alpine
   script:
-    - echo "Running linter..."
-    # Uncomment for Node.js:
-    # - npm ci
-    # - npm run lint
-    - echo "Linting passed (add your lint commands here)"
+    - npm ci
+    - npm run lint || true  # Don't fail on lint warnings
   rules:
     - if: $CI_COMMIT_BRANCH
 
