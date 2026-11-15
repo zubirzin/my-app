@@ -2,7 +2,34 @@ const express = require("express");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ============================================
+// Configuration
+// ============================================
+const config = {
+  db: {
+    enabled: process.env.DATABASE_URL !== undefined && process.env.DATABASE_URL !== "",
+    url: process.env.DATABASE_URL || "",
+    // For local docker-compose without a driver, use DATABASE_HOST style
+    host: process.env.DATABASE_HOST || "",
+    port: parseInt(process.env.DATABASE_PORT || "5432"),
+    user: process.env.DATABASE_USER || "",
+    password: process.env.DATABASE_PASSWORD || "",
+    name: process.env.DATABASE_NAME || "",
+    ssl: process.env.DATABASE_SSL === "true",
+  },
+  nodeEnv: process.env.NODE_ENV || "development",
+};
+
+// In-memory fallback store (used when no database configured)
+let memoryItems = [
+  { id: 1, name: "Item 1", description: "Sample item 1" },
+  { id: 2, name: "Item 2", description: "Sample item 2" },
+  { id: 3, name: "Item 3", description: "Sample item 3" },
+];
+
+// ============================================
 // Middleware
+// ============================================
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -11,28 +38,36 @@ app.use((req, res, next) => {
   const start = Date.now();
   res.on("finish", () => {
     const duration = Date.now() - start;
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms`);
+    console.log(
+      `[${new Date().toISOString()}] ${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms`
+    );
   });
   next();
 });
 
-// Health check endpoint
-app.get("/health", (req, res) => {
-  res.status(200).json({
-    status: "healthy",
+// ============================================
+// Health check
+// ============================================
+app.get("/health", async (req, res) => {
+  const db = await checkDatabase();
+  res.status(db.ok ? 200 : 200).json({
+    status: db.ok ? "healthy" : "degraded",
     uptime: process.uptime(),
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || "development",
+    environment: config.nodeEnv,
+    database: db,
   });
 });
 
+// ============================================
 // API Routes
+// ============================================
 app.get("/api/status", (req, res) => {
   res.json({
     name: "my-app",
     version: "1.0.0",
     status: "running",
-    environment: process.env.NODE_ENV || "development",
+    environment: config.nodeEnv,
   });
 });
 
@@ -46,83 +81,76 @@ app.get("/api/info", (req, res) => {
   });
 });
 
-// Sample CRUD endpoints
-let items = [
-  { id: 1, name: "Item 1", description: "Sample item 1" },
-  { id: 2, name: "Item 2", description: "Sample item 2" },
-  { id: 3, name: "Item 3", description: "Sample item 3" },
-];
+// ============================================
+// Items CRUD
+// ============================================
+app.get("/api/items", async (req, res, next) => {
+  try {
+    const { limit, offset, archived } = req.query;
+    let result = await getAllItems();
 
-// GET all items
-app.get("/api/items", (req, res) => {
-  const { limit, offset } = req.query;
-  let result = [...items];
+    if (archived !== undefined) {
+      result = result.filter((i) => String(!!i.archived) === String(archived));
+    }
+    if (offset) result = result.slice(parseInt(offset));
+    if (limit) result = result.slice(0, parseInt(limit));
 
-  if (offset) result = result.slice(parseInt(offset));
-  if (limit) result = result.slice(0, parseInt(limit));
-
-  res.json({
-    total: items.length,
-    count: result.length,
-    data: result,
-  });
-});
-
-// GET single item
-app.get("/api/items/:id", (req, res) => {
-  const item = items.find((i) => i.id === parseInt(req.params.id));
-  if (!item) {
-    return res.status(404).json({ error: "Item not found" });
+    res.json({ total: result.length, count: result.length, data: result });
+  } catch (err) {
+    next(err);
   }
-  res.json(item);
 });
 
-// POST create item
-app.post("/api/items", (req, res) => {
-  const { name, description } = req.body;
-  if (!name) {
-    return res.status(400).json({ error: "Name is required" });
+app.get("/api/items/:id", async (req, res, next) => {
+  try {
+    const item = await getItem(parseInt(req.params.id));
+    if (!item) return res.status(404).json({ error: "Item not found" });
+    res.json(item);
+  } catch (err) {
+    next(err);
   }
-  const newItem = {
-    id: items.length > 0 ? Math.max(...items.map((i) => i.id)) + 1 : 1,
-    name,
-    description: description || "",
-  };
-  items.push(newItem);
-  res.status(201).json(newItem);
 });
 
-// PUT update item
-app.put("/api/items/:id", (req, res) => {
-  const item = items.find((i) => i.id === parseInt(req.params.id));
-  if (!item) {
-    return res.status(404).json({ error: "Item not found" });
+app.post("/api/items", async (req, res, next) => {
+  try {
+    const { name, description } = req.body;
+    if (!name) return res.status(400).json({ error: "Name is required" });
+    const item = await createItem({ name, description: description || "" });
+    res.status(201).json(item);
+  } catch (err) {
+    next(err);
   }
-  const { name, description } = req.body;
-  if (name) item.name = name;
-  if (description !== undefined) item.description = description;
-  res.json(item);
 });
 
-// DELETE item
-app.delete("/api/items/:id", (req, res) => {
-  const index = items.findIndex((i) => i.id === parseInt(req.params.id));
-  if (index === -1) {
-    return res.status(404).json({ error: "Item not found" });
+app.put("/api/items/:id", async (req, res, next) => {
+  try {
+    const { name, description } = req.body;
+    const updated = await updateItem(parseInt(req.params.id), { name, description });
+    if (!updated) return res.status(404).json({ error: "Item not found" });
+    res.json(updated);
+  } catch (err) {
+    next(err);
   }
-  items.splice(index, 1);
-  res.status(204).send();
 });
 
-// Serve static files from app directory
+app.delete("/api/items/:id", async (req, res, next) => {
+  try {
+    const deleted = await deleteItem(parseInt(req.params.id));
+    if (!deleted) return res.status(404).json({ error: "Item not found" });
+    res.status(204).send();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Static files
 app.use(express.static("app"));
 
-// Root route
 app.get("/", (req, res) => {
   res.sendFile(__dirname + "/app/index.html");
 });
 
-// 404 handler
+// 404
 app.use((req, res) => {
   res.status(404).json({ error: "Not found" });
 });
@@ -130,22 +158,158 @@ app.use((req, res) => {
 // Error handler
 app.use((err, req, res, next) => {
   console.error("Error:", err.message);
-  res.status(500).json({ error: "Internal server error" });
+  res.status(500).json({ error: "Internal server error", message: err.message });
 });
 
+// ============================================
+// Database Layer
+// Uses pg when DATABASE_URL is set, otherwise falls back to in-memory
+// ============================================
+let pgPool = null;
+
+async function initDatabase() {
+  if (!config.db.enabled) {
+    console.log("[db] No DATABASE_URL set — using in-memory store");
+    return;
+  }
+  try {
+    const { Pool } = require("pg");
+    pgPool = new Pool({
+      connectionString: config.db.url,
+      host: config.db.host || undefined,
+      port: config.db.port || undefined,
+      user: config.db.user || undefined,
+      password: config.db.password || undefined,
+      database: config.db.name || undefined,
+      ssl: config.db.ssl ? { rejectUnauthorized: false } : undefined,
+      max: 10,
+      idleTimeoutMillis: 30000,
+    });
+
+    // Test connection
+    const client = await pgPool.connect();
+    await client.query("SELECT 1");
+    client.release();
+
+    // Run schema
+    const fs = require("fs");
+    const path = require("path");
+    const schemaPath = path.join(__dirname, "db", "schema.sql");
+    if (fs.existsSync(schemaPath)) {
+      const schema = fs.readFileSync(schemaPath, "utf8");
+      await pgPool.query(schema);
+      console.log("[db] Schema applied");
+    }
+
+    console.log("[db] Connected to PostgreSQL");
+  } catch (err) {
+    console.error("[db] Connection failed, falling back to in-memory:", err.message);
+    pgPool = null;
+  }
+}
+
+async function checkDatabase() {
+  if (!config.db.enabled) {
+    return { ok: true, mode: "in-memory", enabled: false };
+  }
+  if (!pgPool) {
+    return { ok: false, mode: "in-memory", enabled: true, error: "Not connected" };
+  }
+  try {
+    const result = await pgPool.query("SELECT NOW() as time");
+    return { ok: true, mode: "postgresql", enabled: true, time: result.rows[0].time };
+  } catch (err) {
+    return { ok: false, mode: "postgresql", enabled: true, error: err.message };
+  }
+}
+
+async function getAllItems() {
+  if (!pgPool) return [...memoryItems];
+  const result = await pgPool.query(
+    "SELECT id, name, description, archived, created_at, updated_at FROM items ORDER BY id"
+  );
+  return result.rows;
+}
+
+async function getItem(id) {
+  if (!pgPool) return memoryItems.find((i) => i.id === id) || null;
+  const result = await pgPool.query(
+    "SELECT id, name, description, archived, created_at, updated_at FROM items WHERE id = $1",
+    [id]
+  );
+  return result.rows[0] || null;
+}
+
+async function createItem({ name, description }) {
+  if (!pgPool) {
+    const newItem = {
+      id: memoryItems.length > 0 ? Math.max(...memoryItems.map((i) => i.id)) + 1 : 1,
+      name,
+      description,
+    };
+    memoryItems.push(newItem);
+    return newItem;
+  }
+  const result = await pgPool.query(
+    "INSERT INTO items (name, description) VALUES ($1, $2) RETURNING id, name, description, archived, created_at, updated_at",
+    [name, description]
+  );
+  return result.rows[0];
+}
+
+async function updateItem(id, { name, description }) {
+  if (!pgPool) {
+    const item = memoryItems.find((i) => i.id === id);
+    if (!item) return null;
+    if (name) item.name = name;
+    if (description !== undefined) item.description = description;
+    return item;
+  }
+  const result = await pgPool.query(
+    `UPDATE items SET
+       name = COALESCE($2, name),
+       description = COALESCE($3, description),
+       updated_at = NOW()
+     WHERE id = $1
+     RETURNING id, name, description, archived, created_at, updated_at`,
+    [id, name || null, description !== undefined ? description : null]
+  );
+  return result.rows[0] || null;
+}
+
+async function deleteItem(id) {
+  if (!pgPool) {
+    const index = memoryItems.findIndex((i) => i.id === id);
+    if (index === -1) return false;
+    memoryItems.splice(index, 1);
+    return true;
+  }
+  const result = await pgPool.query("DELETE FROM items WHERE id = $1", [id]);
+  return result.rowCount > 0;
+}
+
+// ============================================
 // Graceful shutdown
-process.on("SIGTERM", () => {
-  console.log("SIGTERM received, shutting down gracefully");
+// ============================================
+async function shutdown(signal) {
+  console.log(`${signal} received, shutting down gracefully`);
+  if (pgPool) {
+    await pgPool.end().catch(() => {});
+  }
   process.exit(0);
-});
+}
 
-process.on("SIGINT", () => {
-  console.log("SIGINT received, shutting down gracefully");
-  process.exit(0);
-});
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
-  console.log(`Health check: http://localhost:${PORT}/health`);
+// ============================================
+// Start
+// ============================================
+initDatabase().then(() => {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Environment: ${config.nodeEnv}`);
+    console.log(`Database: ${config.db.enabled ? "PostgreSQL" : "in-memory"}`);
+    console.log(`Health check: http://localhost:${PORT}/health`);
+  });
 });

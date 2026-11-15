@@ -1,0 +1,16 @@
+# ============================================
+# Kubernetes ConfigMap — Non-sensitive config
+# ============================================
+# kubectl apply -f k8s/configmap.yaml
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: myapp-config
+  namespace: myapp
+  labels:
+    app.kubernetes.io/name: myapp
+data:
+  NODE_ENV: "production"
+  PORT: "3000"
+  LOG_LEVEL: "info"
