@@ -31,7 +31,6 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY server.js .
 COPY package.json .
 COPY app/ ./app/
-COPY tests/ ./tests/
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \
